@@ -13,4 +13,4 @@ else
 fi
 cat load.scm extra.scm out.scm >script.scm
 
-chez mk.scm --script script.scm
+/usr/bin/scheme mk.scm --script script.scm
