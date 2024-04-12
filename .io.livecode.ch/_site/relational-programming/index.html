@@ -1,0 +1,361 @@
+{% extends "base_livecode.html" %}
+
+{% block title %}Relational Programming: an Interactive Tutorial{% endblock %}
+
+{% block content %}
+
+<h2>The Idea of Relational Programming</h2>
+
+<p>Examples of relational paradigm:
+<ul>
+<li>Datalog</li>
+<li>pure SQL</li>
+</ul>
+</p>
+
+<p>Run forwards and backwards.</p>
+
+<p>Abstract interpretation: find fixpoints over lattices.</p>
+
+<p>Logic programming: Prolog:
+  does not emphasize relational, and has logical side effects
+</p>
+
+<p>miniKanren:
+embedded domain specific language for relational programming.
+</p>
+
+<p>Typed version: OCanren in OCaml
+.</p>
+
+<p>relations vs functions</p>
+
+<h3>Table</h3>
+
+<p>domain for x and y: 0, 1, 2</p>
+<p>add x+y to get z</p>
+
+<p>
+x y z<br/>
+0 0 0<br/>
+0 1 1<br/>
+0 2 2<br/>
+1 0 1<br/>
+1 1 2<br/>
+1 2 3<br/>
+2 0 2<br/>
+2 1 3<br/>
+2 2 4<br/>
+...
+</p>
+
+<p>f(x,y)=x+y==z</p>
+
+<p>look up x is 1, and z is 3, find y is 2:
+substraction
+</p>
+
+<p>
+what are all the triples (x,y,z) such that
+x+y==z
+</p>
+
+<p>
+no notion of inputs/outputs
+is (x=1,y=2,z=3) in the table? consistency check
+if x is 2, for which values of y is z==1? no solution
+</p>
+
+<p>
+any non negative integers x,y
+now infinite table
+notion of laziness to control enumeration
+</p>
+
+<p>
+search control
+- depth first search is incomplete for infinite domain
+  - default search for Prolog
+- complete search: eventually enumerate all these values
+  - breadth-first search
+  - iterative deepening
+  - interleaved search
+</p>
+
+<p>
+infinite table constructed lazily
+with infinite search to construct any tuple
+</p>
+
+<p>
+all the triples where z is 5
+finitely many if we don't allow negatives
+how to guarantee finitely many?
+enumerate with monotonically increasing z
+</p>
+
+<p>
+undecidable problems
+</p>
+
+<h2>Intro to the language</h2>
+
+<h3>Scheme</h3>
+<div class="live" id="ex1">
+((lambda (x) (+ x 1)) 2)</div>
+<p>
+
+
+
+<h3>Unification</h3>
+
+<p>
+first-order syntactic unification
+two-way pattern matching
+</p>
+<div class="live" id="ex2">
+(run 1 (q) (== 'cat q))</div>
+<div class="live" id="ex3">
+(run 1 (q) (== 'cat 'dog))</div>
+<div class="live" id="ex4">
+(run 1 (q) (== 'cat 'cat))</div>
+<div class="live" id="ex5">
+(run 1 (x y) (== 'cat 'cat))</div>
+<div class="live" id="ex6">
+(run 1 (x y) (== x y))</div>
+<div class="live" id="ex7">
+(run 1 (x y) (== x y) (== x 'bat))</div>
+<div class="live" id="ex8">
+(run 1 (x y) (== x 'bat) (== x y))</div>
+<div class="live" id="ex9">
+(run 1 (x y) (== x 'bat) (== y x))</div>
+
+<h3><code>conde</code></h3>
+<div class="live" id="ex10">
+(run* (q)
+  (conde
+    ((== q 'dog))
+    ((== q 'cat))))</div>
+
+<h3><code>fresh</code></h3>
+<div class="live" id="ex11">
+(run* (q)
+  (fresh (x y)
+    (== q (list x x y))
+    (== x 'cat)))</div>
+
+<h2><code>appendo</code></h2>
+
+<h3>first, functional</h3>
+<div class="live" id="ex12">
+(append '(a b c) '(d e))</div>
+<div class="live" id="ex13">
+(letrec ((append (lambda (l s)
+                   (if (null? l)
+                       s
+                       (cons (car l)
+                             (append (cdr l) s))))))
+  (append '(a b c) '(d e)))</div>
+
+<h3>relational</h3>
+
+<div class="live norun" id="ex-appendo">
+(define (appendo l s ls)
+  (conde
+    ((== l '()) (== s ls))
+    ((fresh (a d r)
+       (== l (cons a d))
+       (== ls (cons a r))
+       (appendo d s r)))))</div>
+
+<div class="live norun" id="ex-appendo2">
+(define (appendo2 l s ls)
+  (conde
+    ((== l '()) (== s ls))
+    ((fresh (a d r)
+       (== l (cons a d))
+       (appendo2 d s r)
+       (== ls (cons a r))))))</div>
+
+<div class="live" id="ex14" data-lib="ex-appendo">
+(run* (q)
+  (appendo '(a b c) '(e d) q))</div>
+
+<div class="live" id="ex15" data-lib="ex-appendo">
+(run* (x y)
+  (appendo x y '(a b c d e)))
+'((() (a b c d e))
+  ((a) (b c d e))
+  ((a b) (c d e))
+  ((a b c) (d e))
+  ((a b c d) (e))
+  ((a b c d e) ()))</div>
+
+<div class="live" id="ex16" data-lib="ex-appendo2">
+(run 6 (x y)
+  (appendo2 x y '(a b c d e)))</div>
+
+<div class="live" id="ex17" data-lib="ex-appendo2">
+(run 7 (x y)
+  (appendo2 x y '(a b c d e)))</div>
+
+<h3>Simple Relational Interpreter</h3>
+
+<div class="live norun" id="ex-quines">
+(defrel (evalo exp val)
+  (eval-expo exp '() val))
+
+(defrel (eval-expo exp env val)
+  (conde
+    ((fresh (v)
+       (== `(quote ,v) exp)
+       (not-in-envo 'quote env)
+       (absento 'closure v)
+       (== v val)))
+    ((fresh (a*)
+       (== `(list . ,a*) exp)
+       (not-in-envo 'list env)
+       (absento 'closure a*)
+       (proper-listo a* env val)))
+    ((symbolo exp) (lookupo exp env val))
+    ((fresh (rator rand x body env^ a)
+       (== `(,rator ,rand) exp)
+       (eval-expo rator env `(closure ,x ,body ,env^))
+       (eval-expo rand env a)
+       (eval-expo body `((,x . ,a) . ,env^) val)))
+    ((fresh (x body)
+       (== `(lambda (,x) ,body) exp)
+       (symbolo x)
+       (not-in-envo 'lambda env)
+       (== `(closure ,x ,body ,env) val)))))
+
+(defrel (not-in-envo x env)
+  (conde
+    ((fresh (y v rest)
+       (== `((,y . ,v) . ,rest) env)
+       (=/= y x)
+       (not-in-envo x rest)))
+    ((== '() env))))
+
+(defrel (proper-listo exp env val)
+  (conde
+    ((== '() exp)
+     (== '() val))
+    ((fresh (a d t-a t-d)
+       (== `(,a . ,d) exp)
+       (== `(,t-a . ,t-d) val)
+       (eval-expo a env t-a)
+       (proper-listo d env t-d)))))
+
+(defrel (lookupo x env t)
+  (fresh (rest y v)
+    (== `((,y . ,v) . ,rest) env)
+    (conde
+      ((== y x) (== v t))
+      ((=/= y x) (lookupo x rest t)))))
+</div>
+
+<div class="live" id="ex18" data-lib="ex-quines">
+(run 1 (q)
+  (evalo '((lambda (x) x) 'cat) q))</div>
+
+<div class="live" id="ex19" data-lib="ex-quines">
+(run 1 (q)
+  (evalo '(list 'I 'love 'programming) q))</div>
+
+<div class="live" id="ex20" data-lib="ex-quines">
+(run 1 (expr val)
+  (== val '(I love programming))
+  (evalo expr val))</div>
+
+<div class="live" id="ex21" data-lib="ex-quines">
+(run 2 (e)
+  (evalo e '(I love programming)))</div>
+
+<div class="live" id="ex22" data-lib="ex-quines">
+((lambda (x) '(I love programming)) 'foo)</div>
+
+<div class="live" id="ex23" data-lib="ex-quines">
+(run 99 (e)
+  (evalo e '(I love programming)))</div>
+
+<h3>quine</h3>
+
+<div class="live" id="ex24" data-lib="ex-quines">
+(run 1 (e)
+  (evalo e e))</div>
+
+<div class="live" id="ex25">
+((lambda (_.0) (list _.0 (list 'quote _.0)))
+ '(lambda (_.0) (list _.0 (list 'quote _.0))))</div>
+
+<div class="live" id="ex26">
+((lambda (x) (list x (list 'quote x)))
+ '(lambda (x) (list x (list 'quote x))))</div>
+
+<h2>Full Relational Interpreter</h2>
+
+<div class="live norun" id="ex-full">
+(load "full-interp.scm")
+</div>
+
+<h3><code>letrec</code> version of <code>append</code></h3>
+
+<div class="live" id="ex27" data-lib="ex-full">
+(run 1 (q)
+  (evalo
+   `(letrec ((append (lambda (l s)
+                   (if (null? l)
+                       s
+                       (cons (car l)
+                             (append (cdr l) s))))))
+      (append '(a b c) '(d e)))
+   q))</div>
+
+<div class="live" id="ex28" data-lib="ex-full">
+(run 1 (q)
+  (evalo
+   `(letrec ((append (lambda (l s)
+                   (if (null? l)
+                       s
+                       (cons (car l)
+                             (append (cdr l) s))))))
+      (append ,q '(d e)))
+   '(a b c d e)))</div>
+
+<div class="live" id="ex29" data-lib="ex-full">
+(run 2 (q)
+  (evalo
+   `(letrec ((append (lambda (l s)
+                   (if (null? l)
+                       s
+                       (cons (car l)
+                             (append (cdr l) s))))))
+      (append ,q '(d e)))
+   '(a b c d e)))</div>
+
+<div class="live" id="ex30" data-lib="ex-full">
+(run 2 (q)
+  (evalo
+   `(letrec ((append (lambda (l s)
+                   (if (null? l)
+                       s
+                       (cons (car l)
+                             (append (cdr l) s))))))
+      (append ',q '(d e)))
+   '(a b c d e)))</div>
+
+<div class="live" id="ex31" data-lib="ex-full">
+(run 2 (q)
+  (evalo
+   `(letrec ((append (lambda (l s)
+                   (if (null? l)
+                       s
+                       (cons ,q
+                             (append (cdr l) s))))))
+      (append '(a b c) '(d e)))
+   '(a b c d e)))</div>
+
+<h3>Barliman</h3>
+
+{% endblock %}
